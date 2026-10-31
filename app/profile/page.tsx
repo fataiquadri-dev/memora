@@ -1,5 +1,6 @@
 "use client";
 import { getName } from "@/lib/profile";
+import { getName } from "@/lib/profile";
 import { useEffect, useState } from "react";
 import { Stats } from "@/types";
 import { loadStats, loadDecks, currentStreak, formatTime } from "@/lib/storage";
