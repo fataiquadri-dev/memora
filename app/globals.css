@@ -185,3 +185,6 @@ input:focus,textarea:focus{border-color:#6d69ff!important;box-shadow:0 0 0 3px r
 .two{grid-template-columns:1fr}
 }
 @media(max-width:380px){.brain{display:none}.quick-row{grid-template-columns:1fr 1fr}.quick-row .stat:last-child{grid-column:span 2}}
+.welcome{min-height:100vh;display:grid;place-items:center;padding:24px}
+.welcome-card{width:100%;max-width:420px;text-align:center;border:1px solid var(--line);background:rgba(10,22,48,.85);border-radius:26px;padding:34px 24px;box-shadow:var(--shadow)}
+.welcome-input{width:100%;border:1px solid var(--line);background:#07132b;border-radius:14px;padding:15px;color:#fff;text-align:center;font-size:18px;outline:none}

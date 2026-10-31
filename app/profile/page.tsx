@@ -1,4 +1,5 @@
 "use client";
+import { getName } from "@/lib/profile";
 import { useEffect, useState } from "react";
 import { Stats } from "@/types";
 import { loadStats, loadDecks, currentStreak, formatTime } from "@/lib/storage";
@@ -28,7 +29,7 @@ export default function Profile() {
       <div className="profile-head">
         <div className="profile-avatar">🧠</div>
         <div>
-          <h2>StudyMind</h2>
+          <h2>{getName() || "Student"}</h2>
           <p>Consistency builds mastery.</p>
         </div>
       </div>

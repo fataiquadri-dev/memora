@@ -1,4 +1,5 @@
 "use client";
+import { getName } from "@/lib/profile";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Deck } from "@/types";
@@ -21,7 +22,7 @@ export default function Home() {
 
   return (
     <>
-      <h1>Welcome to <span>Memora.</span></h1>
+      <h1>Hi, <span>{getName()}</span> 👋</h1>
       <p className="sub">Your next big breakthrough starts with one card.</p>
 
       <div className="hero">
