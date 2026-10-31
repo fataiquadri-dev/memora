@@ -9,18 +9,19 @@ import FlashcardEditor from "@/components/FlashcardEditor";
 export default function DeckPage() {
   const { id } = useParams<{ id: string }>();
   const [deck, setDeck] = useState<Deck | null>(null);
-  useEffect(() => setDeck(getDeck(id) || null), [id]);
+  const [ready, setReady] = useState(false);
+  useEffect(() => { setDeck(getDeck(id) || null); setReady(true); }, [id]);
 
-  if (!deck) return <p className="sub">Deck not found.</p>;
+  if (!ready) return null;
+  if (!deck) return <div className="panel empty"><p className="sub">Deck not found.</p><Link className="btn" href="/">Make a deck</Link></div>;
   const change = (d: Deck) => { setDeck(d); upsertDeck(d); };
 
   return (
     <>
-      <div className="row">
-        <Link className="btn" href={`/decks/${id}/study`}>Study</Link>
+      <div className="row" style={{ marginBottom: 14 }}>
+        <Link className="btn" href={`/decks/${id}/study`}>▶ Study</Link>
         <Link className="btn ghost" href="/decks">All decks</Link>
       </div>
-      <br />
       <FlashcardEditor deck={deck} onChange={change} />
     </>
   );

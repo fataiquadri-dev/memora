@@ -7,6 +7,7 @@ export default function UploadForm() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [fileName, setFileName] = useState("");
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -26,16 +27,31 @@ export default function UploadForm() {
   }
 
   return (
-    <form onSubmit={onSubmit} className="card">
-      <label>Subject</label>
-      <input name="subject" placeholder="e.g. Biology" />
-      <label>Exam or level (optional)</label>
-      <input name="exam" placeholder="e.g. WAEC, SAT, GCSE, 200L" />
-      <label>Upload notes (PDF or .txt)</label>
-      <input name="file" type="file" accept=".pdf,.txt,.md" />
-      <label>Or paste notes</label>
+    <form onSubmit={onSubmit} className="panel">
+      <div className="two">
+        <div>
+          <label className="lbl">Subject</label>
+          <input name="subject" placeholder="e.g. Biology" />
+        </div>
+        <div>
+          <label className="lbl">Exam or level</label>
+          <input name="exam" placeholder="e.g. WAEC, SAT" />
+        </div>
+      </div>
+
+      <label className="drop">
+        <span style={{ fontSize: "1.8rem" }}>📄</span>
+        <strong>{fileName || "Tap to upload notes"}</strong>
+        <span>PDF, .txt or .md</span>
+        <input name="file" type="file" accept=".pdf,.txt,.md" onChange={(e) => setFileName(e.target.files?.[0]?.name || "")} />
+      </label>
+
+      <label className="lbl">Or paste your notes</label>
       <textarea name="text" rows={6} placeholder="Paste your notes here..." />
-      <button disabled={loading}>{loading ? "Creating flashcards..." : "Make flashcards"}</button>
+
+      <button className="btn block" disabled={loading}>
+        {loading ? (<><span className="spinner" /> Reading your notes...</>) : "✨ Make flashcards"}
+      </button>
       {error && <p className="err">{error}</p>}
     </form>
   );

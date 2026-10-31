@@ -1,11 +1,10 @@
-import Link from "next/link";
 import DeckList from "@/components/DeckList";
 
 export default function Decks() {
   return (
     <>
-      <h1>My decks</h1>
-      <p className="sub"><Link href="/">+ New deck</Link></p>
+      <h1 className="hero">My <span className="grad">decks</span></h1>
+      <p className="sub">Everything you've made, ready to study.</p>
       <DeckList />
     </>
   );
