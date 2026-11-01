@@ -1,6 +1,5 @@
 "use client";
 import { getName } from "@/lib/profile";
-import { getName } from "@/lib/profile";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Deck } from "@/types";
