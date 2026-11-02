@@ -2,9 +2,25 @@ import "./globals.css";
 import type { Metadata, Viewport } from "next";
 import Shell from "@/components/Shell";
 
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://memora-delta-khaki.vercel.app";
+const google = process.env.NEXT_PUBLIC_GOOGLE_VERIFICATION;
+
 export const metadata: Metadata = {
-  title: "Memora: Study Smarter",
-  description: "Turn your notes into flashcards instantly.",
+  metadataBase: new URL(siteUrl),
+  title: { default: "Memora: AI Flashcard Maker for Students", template: "%s | Memora" },
+  description:
+    "Memora turns your notes into flashcards in seconds. Upload a PDF or paste your notes, study with flip cards, and focus on exam-likely questions. Free for students.",
+  keywords: ["Memora", "flashcards", "flashcard app", "AI flashcard maker", "study app", "exam revision", "notes to flashcards"],
+  applicationName: "Memora",
+  alternates: { canonical: "/" },
+  openGraph: {
+    title: "Memora: AI Flashcard Maker for Students",
+    description: "Turn your notes into flashcards in seconds and study smarter.",
+    url: siteUrl,
+    siteName: "Memora",
+    type: "website",
+  },
+  verification: google ? { google } : undefined,
 };
 export const viewport: Viewport = { themeColor: "#050b19", width: "device-width", initialScale: 1 };
 
