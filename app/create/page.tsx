@@ -1,4 +1,5 @@
 "use client";
+import { uid } from "@/lib/ids";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Flashcard } from "@/types";
@@ -104,14 +105,14 @@ export default function CreatePage() {
       const start = Math.floor(Math.random() * THEMES.length);
       const stamp = Date.now();
       const cards: Flashcard[] = unique.map((c, i) => ({
-        id: `${stamp}-${i}`,
+        id: uid(),
         front: c.front,
         back: c.back,
         examLikely: !!c.examLikely,
         theme: (start + i) % THEMES.length,
       }));
 
-      const id = String(stamp);
+      const id = uid();
       upsertDeck({
         id,
         title: name || title || subject || "New deck",

@@ -1,4 +1,5 @@
 "use client";
+import { uid } from "@/lib/ids";
 import { useState } from "react";
 import Link from "next/link";
 import { Deck, Flashcard } from "@/types";
@@ -24,7 +25,7 @@ export default function DeckEditor({ deck, onChange }: { deck: Deck; onChange: (
   };
   const add = () =>
     setDraft({
-      id: String(Date.now()),
+      id: uid(),
       front: "",
       back: "",
       theme: Math.floor(Math.random() * THEMES.length),

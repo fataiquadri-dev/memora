@@ -1,3 +1,5 @@
+import { markStatsDirty, scheduleFlush, startSync } from "@/lib/sync";
+
 const KEY = "memora_name";
 
 export function getName(): string {
@@ -12,4 +14,7 @@ export function setName(name: string) {
   try {
     localStorage.setItem(KEY, name.trim());
   } catch {}
+  markStatsDirty();
+  startSync();
+  scheduleFlush();
 }
