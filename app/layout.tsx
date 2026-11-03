@@ -1,8 +1,7 @@
 import "./globals.css";
 import type { Metadata, Viewport } from "next";
-import Shell from "@/components/Shell";
 
-const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://memora-delta-khaki.vercel.app";
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://memora-flashcards-app.vercel.app";
 const google = process.env.NEXT_PUBLIC_GOOGLE_VERIFICATION;
 
 export const metadata: Metadata = {
@@ -12,7 +11,6 @@ export const metadata: Metadata = {
     "Memora turns your notes into flashcards in seconds. Upload a PDF or paste your notes, study with flip cards, and focus on exam-likely questions. Free for students.",
   keywords: ["Memora", "flashcards", "flashcard app", "AI flashcard maker", "study app", "exam revision", "notes to flashcards"],
   applicationName: "Memora",
-  alternates: { canonical: "/" },
   openGraph: {
     title: "Memora: AI Flashcard Maker for Students",
     description: "Turn your notes into flashcards in seconds and study smarter.",
@@ -35,9 +33,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           rel="stylesheet"
         />
       </head>
-      <body>
-        <Shell>{children}</Shell>
-      </body>
+      <body>{children}</body>
     </html>
   );
 }

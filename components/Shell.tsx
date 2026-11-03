@@ -6,7 +6,7 @@ import { loadStats, currentStreak } from "@/lib/storage";
 import { getName, setName as saveName } from "@/lib/profile";
 
 const NAV = [
-  { href: "/", label: "Home", icon: "⌂" },
+  { href: "/home", label: "Home", icon: "⌂" },
   { href: "/study", label: "Study", icon: "♧" },
   { href: "/create", label: "Create", icon: "⊕" },
   { href: "/library", label: "Library", icon: "▤" },
@@ -14,7 +14,7 @@ const NAV = [
 ];
 
 const EYEBROW: Record<string, string> = {
-  "/": "YOUR LEARNING SPACE",
+  "/home": "YOUR LEARNING SPACE",
   "/study": "FOCUS MODE",
   "/create": "BUILD YOUR KNOWLEDGE",
   "/library": "YOUR COLLECTION",
