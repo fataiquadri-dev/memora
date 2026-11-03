@@ -1,13 +1,53 @@
 "use client";
-import { uid } from "@/lib/ids";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Flashcard } from "@/types";
 import { upsertDeck } from "@/lib/storage";
 import { THEMES } from "@/lib/themes";
 import { splitText } from "@/lib/chunk";
+import { uid } from "@/lib/ids";
 
 type Part = { title: string; icon: string; cards: { front: string; back: string; examLikely: boolean }[] };
+
+const PDFJS = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
+const PDFJS_WORKER = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+const MAX_PARTS = 30;
+
+let pdfPromise: Promise<any> | null = null;
+function loadPdfJs(): Promise<any> {
+  if (pdfPromise) return pdfPromise;
+  pdfPromise = new Promise((resolve, reject) => {
+    const w = window as any;
+    if (w.pdfjsLib) return resolve(w.pdfjsLib);
+    const s = document.createElement("script");
+    s.src = PDFJS;
+    s.onload = () => {
+      w.pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER;
+      resolve(w.pdfjsLib);
+    };
+    s.onerror = () => {
+      pdfPromise = null;
+      reject(new Error("Could not load the PDF reader. Check your internet and try again."));
+    };
+    document.head.appendChild(s);
+  });
+  return pdfPromise;
+}
+
+async function readPdf(file: File, onPage: (p: number, n: number) => void): Promise<string> {
+  const lib = await loadPdfJs();
+  const pdf = await lib.getDocument({ data: await file.arrayBuffer() }).promise;
+  let out = "";
+  for (let p = 1; p <= pdf.numPages; p++) {
+    const page = await pdf.getPage(p);
+    const content = await page.getTextContent();
+    out += content.items.map((it: any) => it.str + (it.hasEOL ? "\n" : " ")).join("") + "\n";
+    onPage(p, pdf.numPages);
+  }
+  return out;
+}
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 async function generate(text: string, subject: string, exam: string, part: number, parts: number): Promise<Part> {
   let lastError = "Something went wrong";
@@ -18,13 +58,23 @@ async function generate(text: string, subject: string, exam: string, part: numbe
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text, subject, exam, part, parts }),
       });
-      const data = await res.json();
-      if (res.ok) return data;
-      lastError = data.error || lastError;
+      const raw = await res.text();
+      let data: any = null;
+      try {
+        data = JSON.parse(raw);
+      } catch {}
+      if (res.ok && data) return data as Part;
+      lastError =
+        data?.error ||
+        (res.status === 504
+          ? "The AI took too long to answer."
+          : res.status === 413
+          ? "Those notes are too large for one request."
+          : "The server sent an unexpected reply.");
     } catch (e: any) {
       lastError = e.message || lastError;
     }
-    if (attempt < 2) await new Promise((r) => setTimeout(r, 3000 * (attempt + 1)));
+    if (attempt < 2) await sleep(3000 * (attempt + 1));
   }
   throw new Error(lastError);
 }
@@ -51,15 +101,22 @@ export default function CreatePage() {
     setStatus("Reading your notes...");
     try {
       if (file instanceof File && file.size > 0) {
-        const ex = new FormData();
-        ex.append("file", file);
-        const r = await fetch("/api/extract", { method: "POST", body: ex });
-        const j = await r.json();
-        if (!r.ok) throw new Error(j.error || "Could not read that file.");
-        text += "\n" + j.text;
+        if (file.size > 30 * 1024 * 1024) throw new Error("That file is over 30 MB. Please use a smaller one.");
+        if (file.name.toLowerCase().endsWith(".pdf")) {
+          text += "\n" + (await readPdf(file, (p, n) => setStatus(`Reading your PDF (page ${p} of ${n})...`)));
+        } else {
+          text += "\n" + (await file.text());
+        }
       }
       const chunks = splitText(text.trim(), 4500);
-      if (!chunks.length) throw new Error("Please add more notes.");
+      if (!chunks.length) {
+        throw new Error("Not enough readable text found. If your PDF is scanned pictures, paste the text instead.");
+      }
+      if (chunks.length > MAX_PARTS) {
+        throw new Error(
+          `These notes are very long (${chunks.length} parts). Please upload a smaller section, about 30 to 50 pages at a time.`
+        );
+      }
 
       const results: (Part | null)[] = chunks.map(() => null);
       const queue = chunks.map((_, n) => n);

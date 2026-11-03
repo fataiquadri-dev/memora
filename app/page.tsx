@@ -29,7 +29,7 @@ const FEATURES = [
 const FAQ = [
   { q: "Is Memora free?", a: "Yes, Memora is free to use right now." },
   { q: "Do I need to create an account?", a: "No password is needed. Just enter your first name and start making flashcards." },
-  { q: "What can I upload?", a: "PDF, .txt, and .md files, or you can paste text straight in. Keep files under about 4 MB. Scanned PDFs that are only pictures cannot be read yet." },
+  { q: "What can I upload?", a: "PDF, .txt, and .md files, or you can paste text straight in. Scanned PDFs that are only pictures cannot be read yet." },
   { q: "How does Memora decide which cards are exam-likely?", a: "The AI rates each card by how likely it is to be tested for your subject and level, using your notes and its general knowledge. It is a helpful guide, not a guarantee." },
   { q: "Are my notes private?", a: "Your decks are saved on your device and backed up to your Memora account. Your notes are sent to an AI service (Google Gemini) only to write your flashcards, so please do not upload anything confidential." },
 ];
