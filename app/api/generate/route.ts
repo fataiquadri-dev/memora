@@ -20,12 +20,19 @@ export async function POST(req: Request) {
   try {
     const body = await req.json();
     const text = String(body.text || "").slice(0, 12000);
-    if (text.trim().length < 30) {
+    if (text.trim().length < 10) {
       return NextResponse.json({ error: "Please add more notes." }, { status: 400 });
     }
     const raw = await askGrok(
       SYSTEM_PROMPT,
-      buildUserPrompt(text, String(body.subject || ""), String(body.exam || ""), Number(body.part) || 0, Number(body.parts) || 1)
+      buildUserPrompt(
+        text,
+        String(body.subject || ""),
+        String(body.exam || ""),
+        Number(body.part) || 0,
+        Number(body.parts) || 1,
+        String(body.source || "")
+      )
     );
     const json = parseJson(raw);
     const list: any[] = Array.isArray(json.cards) ? json.cards : [];

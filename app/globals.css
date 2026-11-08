@@ -255,3 +255,10 @@ input:focus,textarea:focus{border-color:#6d69ff!important;box-shadow:0 0 0 3px r
 .lp-final h2{font:700 clamp(24px,4vw,32px) 'Space Grotesk',sans-serif}
 .lp-footer{text-align:center;color:var(--muted);font-size:.85rem;padding:30px 0 0}
 @media(max-width:760px){.lp-hero{grid-template-columns:1fr}.lp-steps,.lp-features{grid-template-columns:1fr}.lp-cards{height:310px}}
+.file-list{display:grid;gap:8px;margin:-8px 0 18px}
+.file-row{display:flex;align-items:center;gap:10px;border:1px solid var(--line);background:#0b1834;border-radius:12px;padding:10px 12px;font-size:13px}
+.file-row .n{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.file-row small{color:var(--muted)}
+.file-row button{border:0;background:transparent;color:#ff7eaa;font-size:16px;padding:0 4px}
+.check{display:flex;align-items:center;gap:10px;margin:0 0 18px;color:#b7c6e8;font-size:13px}
+.check input{width:18px;height:18px;padding:0;margin:0;accent-color:#7c4dff}

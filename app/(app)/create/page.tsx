@@ -7,11 +7,16 @@ import { THEMES } from "@/lib/themes";
 import { splitText } from "@/lib/chunk";
 import { uid } from "@/lib/ids";
 
-type Part = { title: string; icon: string; cards: { front: string; back: string; examLikely: boolean }[] };
+type Card = { front: string; back: string; examLikely: boolean };
+type Part = { title: string; icon: string; cards: Card[] };
+type Source = { name: string; text: string };
+type Job = { src: number; n: number; total: number; text: string };
 
 const PDFJS = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
 const PDFJS_WORKER = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
-const MAX_PARTS = 30;
+const MAX_FILES = 20;
+const MAX_FILE_MB = 30;
+const CHUNK = 4500;
 
 let pdfPromise: Promise<any> | null = null;
 function loadPdfJs(): Promise<any> {
@@ -47,16 +52,39 @@ async function readPdf(file: File, onPage: (p: number, n: number) => void): Prom
   return out;
 }
 
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+async function readFile(file: File, onPage: (p: number, n: number) => void): Promise<string> {
+  if (file.name.toLowerCase().endsWith(".pdf")) return readPdf(file, onPage);
+  return file.text();
+}
 
-async function generate(text: string, subject: string, exam: string, part: number, parts: number): Promise<Part> {
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+const prettyName = (n: string) => n.replace(/\.[^.]+$/, "").replace(/[_-]+/g, " ").trim() || n;
+
+function dedupe(cards: Card[]): Card[] {
+  const seen = new Set<string>();
+  return cards.filter((c) => {
+    const k = c.front.toLowerCase().replace(/\s+/g, " ");
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+}
+
+async function generate(
+  text: string,
+  subject: string,
+  exam: string,
+  part: number,
+  parts: number,
+  source: string
+): Promise<Part> {
   let lastError = "Something went wrong";
-  for (let attempt = 0; attempt < 3; attempt++) {
+  for (let attempt = 0; attempt < 4; attempt++) {
     try {
       const res = await fetch("/api/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text, subject, exam, part, parts }),
+        body: JSON.stringify({ text, subject, exam, part, parts, source }),
       });
       const raw = await res.text();
       let data: any = null;
@@ -74,7 +102,8 @@ async function generate(text: string, subject: string, exam: string, part: numbe
     } catch (e: any) {
       lastError = e.message || lastError;
     }
-    if (attempt < 2) await sleep(3000 * (attempt + 1));
+    const limited = /429|quota|rate|exhausted|overload|503/i.test(lastError);
+    if (attempt < 3) await sleep((limited ? 15000 : 3000) * (attempt + 1));
   }
   throw new Error(lastError);
 }
@@ -84,121 +113,257 @@ export default function CreatePage() {
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
-  const [fileName, setFileName] = useState("");
+  const [files, setFiles] = useState<File[]>([]);
+
+  function addFiles(picked: File[]) {
+    setFiles((prev) => {
+      const next = [...prev];
+      for (const f of picked) {
+        if (next.length >= MAX_FILES) break;
+        if (!next.some((x) => x.name === f.name && x.size === f.size)) next.push(f);
+      }
+      return next;
+    });
+  }
+  const removeFile = (i: number) => setFiles((prev) => prev.filter((_, k) => k !== i));
+  const sizeLabel = (b: number) =>
+    b > 1024 * 1024 ? `${(b / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(b / 1024))} KB`;
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError("");
     const fd = new FormData(e.currentTarget);
-    const file = fd.get("file");
-    let text = String(fd.get("text") || "");
+    const pasted = String(fd.get("text") || "").trim();
     const name = String(fd.get("name") || "").trim();
     const subject = String(fd.get("subject") || "").trim();
     const exam = String(fd.get("exam") || "").trim();
     const description = String(fd.get("description") || "").trim();
+    const separate = fd.get("separate") === "on";
+
+    if (!pasted && !files.length) {
+      setError("Add at least one file or paste some notes.");
+      return;
+    }
 
     setLoading(true);
-    setStatus("Reading your notes...");
+    setStatus("Getting ready...");
+    let lock: any = null;
     try {
-      if (file instanceof File && file.size > 0) {
-        if (file.size > 30 * 1024 * 1024) throw new Error("That file is over 30 MB. Please use a smaller one.");
-        if (file.name.toLowerCase().endsWith(".pdf")) {
-          text += "\n" + (await readPdf(file, (p, n) => setStatus(`Reading your PDF (page ${p} of ${n})...`)));
-        } else {
-          text += "\n" + (await file.text());
+      try {
+        lock = await (navigator as any).wakeLock?.request("screen");
+      } catch {}
+
+      // 1. Read every file, one at a time
+      const sources: Source[] = [];
+      const unreadable: string[] = [];
+      if (pasted) sources.push({ name: "Pasted notes", text: pasted });
+      for (let i = 0; i < files.length; i++) {
+        const f = files[i];
+        if (f.size > MAX_FILE_MB * 1024 * 1024) {
+          unreadable.push(`${f.name} (over ${MAX_FILE_MB} MB)`);
+          continue;
         }
+        setStatus(`Reading ${f.name} (file ${i + 1} of ${files.length})...`);
+        let text = "";
+        try {
+          text = await readFile(f, (p, n) =>
+            setStatus(`Reading ${f.name}, page ${p} of ${n} (file ${i + 1} of ${files.length})...`)
+          );
+        } catch (err: any) {
+          unreadable.push(`${f.name} (${err.message || "could not be read"})`);
+          continue;
+        }
+        if (text.trim().length < 10) {
+          unreadable.push(`${f.name} (no readable text)`);
+          continue;
+        }
+        sources.push({ name: f.name, text });
       }
-      const chunks = splitText(text.trim(), 4500);
-      if (!chunks.length) {
-        throw new Error("Not enough readable text found. If your PDF is scanned pictures, paste the text instead.");
-      }
-      if (chunks.length > MAX_PARTS) {
+      if (!sources.length) {
         throw new Error(
-          `These notes are very long (${chunks.length} parts). Please upload a smaller section, about 30 to 50 pages at a time.`
+          unreadable.length
+            ? `Could not read: ${unreadable.join(", ")}. If a PDF is scanned pictures, paste the text instead.`
+            : "Please add more notes."
         );
       }
 
-      const results: (Part | null)[] = chunks.map(() => null);
-      const queue = chunks.map((_, n) => n);
-      let finished = 0;
-      let failed = 0;
-      let lastError = "";
-      setStatus(`Writing flashcards (0 of ${chunks.length} parts done)...`);
+      // 2. Cut everything into sections. Nothing is dropped.
+      const jobs: Job[] = [];
+      sources.forEach((s, si) => {
+        const chunks = splitText(s.text, CHUNK);
+        chunks.forEach((c, n) => jobs.push({ src: si, n, total: chunks.length, text: c }));
+      });
+      if (!jobs.length) throw new Error("Not enough readable text found.");
 
-      const worker = async () => {
-        while (queue.length) {
-          const n = queue.shift() as number;
-          try {
-            results[n] = await generate(chunks[n], subject, exam, n, chunks.length);
-          } catch (err: any) {
-            failed++;
-            lastError = err.message;
-          }
-          finished++;
-          setStatus(`Writing flashcards (${finished} of ${chunks.length} parts done)...`);
+      if (jobs.length > 40) {
+        const mins = Math.max(2, Math.round(((jobs.length / 3) * 12) / 60));
+        const ok = confirm(
+          `This is a lot of material (${jobs.length} sections). It will take about ${mins} minutes. Keep this page open and your screen on. Continue?`
+        );
+        if (!ok) {
+          setLoading(false);
+          return;
         }
-      };
-      await Promise.all(Array.from({ length: Math.min(3, chunks.length) }, worker));
-
-      let title = "";
-      let icon = "";
-      let all: Part["cards"] = [];
-      for (const r of results) {
-        if (!r) continue;
-        if (!title && r.title) title = r.title;
-        if (!icon && r.icon) icon = r.icon;
-        all = all.concat(r.cards);
       }
 
-      const seen = new Set<string>();
-      const unique = all.filter((c) => {
-        const k = c.front.toLowerCase().replace(/\s+/g, " ");
-        if (seen.has(k)) return false;
-        seen.add(k);
-        return true;
-      });
-      if (!unique.length) throw new Error(lastError || "No flashcards could be made from these notes.");
+      // 3. Write cards for every section, 3 at a time
+      const results: (Part | null)[] = jobs.map(() => null);
+      const queue = jobs.map((_, i) => i);
+      let done = 0;
+      let lastErr = "";
+      const run = async (i: number) => {
+        const j = jobs[i];
+        results[i] = await generate(j.text, subject, exam, j.n, j.total, sources[j.src].name);
+      };
+      const worker = async () => {
+        while (queue.length) {
+          const i = queue.shift() as number;
+          try {
+            await run(i);
+          } catch (err: any) {
+            lastErr = err.message;
+          }
+          done++;
+          setStatus(`Writing flashcards (${done} of ${jobs.length} sections done)...`);
+        }
+      };
+      setStatus(`Writing flashcards (0 of ${jobs.length} sections done)...`);
+      await Promise.all(Array.from({ length: Math.min(3, jobs.length) }, worker));
 
-      const start = Math.floor(Math.random() * THEMES.length);
+      // 4. Second chance for any section that failed
+      const retry = jobs.map((_, i) => i).filter((i) => !results[i]);
+      for (let k = 0; k < retry.length; k++) {
+        setStatus(`Retrying section ${k + 1} of ${retry.length} that did not go through...`);
+        await sleep(6000);
+        try {
+          await run(retry[k]);
+        } catch (err: any) {
+          lastErr = err.message;
+        }
+      }
+      const failed = jobs.map((_, i) => i).filter((i) => !results[i]);
+
+      // 5. Build the deck(s)
+      const bySource = sources.map((s) => ({ name: s.name, title: "", icon: "", cards: [] as Card[] }));
+      jobs.forEach((j, i) => {
+        const r = results[i];
+        if (!r) return;
+        const o = bySource[j.src];
+        if (!o.title && r.title) o.title = r.title;
+        if (!o.icon && r.icon) o.icon = r.icon;
+        o.cards.push(...r.cards);
+      });
+
+      const toMake =
+        separate && sources.length > 1
+          ? bySource
+              .filter((o) => o.cards.length)
+              .map((o) => ({ title: prettyName(o.name), icon: o.icon, cards: dedupe(o.cards) }))
+          : [
+              {
+                title: name || bySource.find((o) => o.title)?.title || subject || "New deck",
+                icon: bySource.find((o) => o.icon)?.icon || "",
+                cards: dedupe(bySource.flatMap((o) => o.cards)),
+              },
+            ];
+
+      if (!toMake.some((d) => d.cards.length)) {
+        throw new Error(lastErr || "No flashcards could be made from these notes.");
+      }
+
       const stamp = Date.now();
-      const cards: Flashcard[] = unique.map((c, i) => ({
-        id: uid(),
-        front: c.front,
-        back: c.back,
-        examLikely: !!c.examLikely,
-        theme: (start + i) % THEMES.length,
-      }));
-
-      const id = uid();
-      upsertDeck({
-        id,
-        title: name || title || subject || "New deck",
-        icon: icon || "📘",
-        description,
-        createdAt: stamp,
-        cards,
+      const ids: string[] = [];
+      toMake.forEach((d, di) => {
+        const start = Math.floor(Math.random() * THEMES.length);
+        const cards: Flashcard[] = d.cards.map((c, i) => ({
+          id: uid(),
+          front: c.front,
+          back: c.back,
+          examLikely: !!c.examLikely,
+          theme: (start + i) % THEMES.length,
+        }));
+        const id = uid();
+        ids.push(id);
+        upsertDeck({
+          id,
+          title: d.title || "New deck",
+          icon: d.icon || "📘",
+          description,
+          createdAt: stamp - di,
+          cards,
+        });
       });
-      if (failed) alert(`${failed} part(s) of your notes could not be processed, but the rest was saved.`);
-      router.push(`/library/${id}`);
+
+      // 6. Tell the student exactly what, if anything, was missed
+      const notes: string[] = [];
+      if (unreadable.length) {
+        notes.push(`Could not read: ${unreadable.join(", ")}. Scanned pictures cannot be read yet, so paste their text instead.`);
+      }
+      if (failed.length) {
+        const labels = failed
+          .slice(0, 8)
+          .map((i) => `${sources[jobs[i].src].name} (section ${jobs[i].n + 1} of ${jobs[i].total})`)
+          .join("; ");
+        notes.push(
+          `${failed.length} section(s) could not be processed: ${labels}${failed.length > 8 ? "..." : ""}. The free AI limit may have been reached. Everything else was saved. Try those files again later.`
+        );
+      }
+      if (notes.length) alert(notes.join("\n\n"));
+
+      router.push(ids.length === 1 ? `/library/${ids[0]}` : "/library");
     } catch (err: any) {
       setError(err.message || "Something went wrong");
       setLoading(false);
+    } finally {
+      try {
+        await lock?.release();
+      } catch {}
     }
   }
 
   return (
     <>
       <h1>Create a <span>deck.</span></h1>
-      <p className="sub">Upload your notes and Memora writes the flashcards for you.</p>
+      <p className="sub">Add your notes and Memora writes flashcards from every part of them.</p>
 
       <div className="form-card">
         <form onSubmit={onSubmit}>
           <label className="upload-box">
             <strong>📄</strong>
-            {fileName || "Tap to upload your notes"}
-            <small style={{ display: "block", marginTop: 5 }}>PDF, .txt or .md</small>
-            <input name="file" type="file" accept=".pdf,.txt,.md" onChange={(e) => setFileName(e.target.files?.[0]?.name || "")} />
+            {files.length ? "Tap to add more files" : "Tap to add your notes"}
+            <small style={{ display: "block", marginTop: 5 }}>
+              PDF, .txt or .md. Select several files at once.
+            </small>
+            <input
+              type="file"
+              multiple
+              accept=".pdf,.txt,.md"
+              onChange={(e) => {
+                const picked = Array.from(e.target.files || []);
+                e.target.value = "";
+                addFiles(picked);
+              }}
+            />
           </label>
+
+          {files.length > 0 && (
+            <div className="file-list">
+              {files.map((f, i) => (
+                <div className="file-row" key={f.name + f.size}>
+                  <span className="n">📎 {f.name}</span>
+                  <small>{sizeLabel(f.size)}</small>
+                  <button type="button" onClick={() => removeFile(i)} aria-label="Remove file">✕</button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {files.length > 1 && (
+            <label className="check">
+              <input type="checkbox" name="separate" />
+              Make a separate deck for each file
+            </label>
+          )}
 
           <div className="field">
             <label>Or paste your notes</label>
@@ -244,7 +409,7 @@ export default function CreatePage() {
           <div className="overlay-card">
             <div className="spinner" />
             <b>{status}</b>
-            <p>Longer notes take a little longer. Please keep this page open.</p>
+            <p>Every section of your notes is being read. Please keep this page open.</p>
           </div>
         </div>
       )}
