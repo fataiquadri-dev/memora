@@ -6,9 +6,10 @@ import { upsertDeck } from "@/lib/storage";
 import { THEMES } from "@/lib/themes";
 import { splitText } from "@/lib/chunk";
 import { uid } from "@/lib/ids";
+import { generate, resetAi, dailyLimitHit, dailyMessage } from "@/lib/aiClient";
+import type { Part } from "@/lib/aiClient";
 
 type Card = { front: string; back: string; examLikely: boolean };
-type Part = { title: string; icon: string; cards: Card[] };
 type Source = { name: string; text: string };
 type Job = { src: number; n: number; total: number; text: string };
 
@@ -16,7 +17,7 @@ const PDFJS = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js
 const PDFJS_WORKER = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
 const MAX_FILES = 20;
 const MAX_FILE_MB = 30;
-const CHUNK = 4500;
+const CHUNK = 7000;
 
 let pdfPromise: Promise<any> | null = null;
 function loadPdfJs(): Promise<any> {
@@ -57,7 +58,6 @@ async function readFile(file: File, onPage: (p: number, n: number) => void): Pro
   return file.text();
 }
 
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const prettyName = (n: string) => n.replace(/\.[^.]+$/, "").replace(/[_-]+/g, " ").trim() || n;
 
 function dedupe(cards: Card[]): Card[] {
@@ -68,44 +68,6 @@ function dedupe(cards: Card[]): Card[] {
     seen.add(k);
     return true;
   });
-}
-
-async function generate(
-  text: string,
-  subject: string,
-  exam: string,
-  part: number,
-  parts: number,
-  source: string
-): Promise<Part> {
-  let lastError = "Something went wrong";
-  for (let attempt = 0; attempt < 4; attempt++) {
-    try {
-      const res = await fetch("/api/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text, subject, exam, part, parts, source }),
-      });
-      const raw = await res.text();
-      let data: any = null;
-      try {
-        data = JSON.parse(raw);
-      } catch {}
-      if (res.ok && data) return data as Part;
-      lastError =
-        data?.error ||
-        (res.status === 504
-          ? "The AI took too long to answer."
-          : res.status === 413
-          ? "Those notes are too large for one request."
-          : "The server sent an unexpected reply.");
-    } catch (e: any) {
-      lastError = e.message || lastError;
-    }
-    const limited = /429|quota|rate|exhausted|overload|503/i.test(lastError);
-    if (attempt < 3) await sleep((limited ? 15000 : 3000) * (attempt + 1));
-  }
-  throw new Error(lastError);
 }
 
 export default function CreatePage() {
@@ -132,6 +94,7 @@ export default function CreatePage() {
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError("");
+    resetAi();
     const fd = new FormData(e.currentTarget);
     const pasted = String(fd.get("text") || "").trim();
     const name = String(fd.get("name") || "").trim();
@@ -206,17 +169,17 @@ export default function CreatePage() {
         }
       }
 
-      // 3. Write cards for every section, 3 at a time
+      // 3. Write cards for every section, 3 at a time. Requests slow down together if Google asks.
       const results: (Part | null)[] = jobs.map(() => null);
       const queue = jobs.map((_, i) => i);
       let done = 0;
       let lastErr = "";
       const run = async (i: number) => {
         const j = jobs[i];
-        results[i] = await generate(j.text, subject, exam, j.n, j.total, sources[j.src].name);
+        results[i] = await generate(j.text, subject, exam, j.n, j.total, sources[j.src].name, setStatus);
       };
       const worker = async () => {
-        while (queue.length) {
+        while (queue.length && !dailyLimitHit()) {
           const i = queue.shift() as number;
           try {
             await run(i);
@@ -232,9 +195,8 @@ export default function CreatePage() {
 
       // 4. Second chance for any section that failed
       const retry = jobs.map((_, i) => i).filter((i) => !results[i]);
-      for (let k = 0; k < retry.length; k++) {
+      for (let k = 0; k < retry.length && !dailyLimitHit(); k++) {
         setStatus(`Retrying section ${k + 1} of ${retry.length} that did not go through...`);
-        await sleep(6000);
         try {
           await run(retry[k]);
         } catch (err: any) {
@@ -268,7 +230,7 @@ export default function CreatePage() {
             ];
 
       if (!toMake.some((d) => d.cards.length)) {
-        throw new Error(lastErr || "No flashcards could be made from these notes.");
+        throw new Error(dailyLimitHit() ? dailyMessage() : lastErr || "No flashcards could be made from these notes.");
       }
 
       const stamp = Date.now();
@@ -299,13 +261,15 @@ export default function CreatePage() {
       if (unreadable.length) {
         notes.push(`Could not read: ${unreadable.join(", ")}. Scanned pictures cannot be read yet, so paste their text instead.`);
       }
-      if (failed.length) {
+      if (dailyLimitHit()) {
+        notes.push(`${dailyMessage()} ${failed.length} section(s) were not done, so only part of your notes became cards. Upload the same files again after the reset.`);
+      } else if (failed.length) {
         const labels = failed
           .slice(0, 8)
           .map((i) => `${sources[jobs[i].src].name} (section ${jobs[i].n + 1} of ${jobs[i].total})`)
           .join("; ");
         notes.push(
-          `${failed.length} section(s) could not be processed: ${labels}${failed.length > 8 ? "..." : ""}. The free AI limit may have been reached. Everything else was saved. Try those files again later.`
+          `${failed.length} section(s) could not be processed: ${labels}${failed.length > 8 ? "..." : ""}. Everything else was saved. Try those files again in a few minutes.`
         );
       }
       if (notes.length) alert(notes.join("\n\n"));
