@@ -1,4 +1,5 @@
 "use client";
+import GoogleButton from "@/components/GoogleButton";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -29,7 +30,9 @@ function Welcome({ onDone }: { onDone: (n: string) => void }) {
         <div className="brand" style={{ margin: 0, fontSize: 40 }}>Memora</div>
         <p className="tagline" style={{ margin: "6px 0 26px" }}>Study Smarter. Remember Longer.</p>
         <h1 style={{ fontSize: 30 }}>Welcome! 👋</h1>
-        <p className="sub" style={{ marginBottom: 18 }}>What should we call you?</p>
+        <p className="sub" style={{ marginBottom: 18 }}>Sign in to save your decks on any phone, or just enter your name.</p>
+        <GoogleButton />
+        <div className="or">or enter your name</div>
         <form
           onSubmit={(e) => {
             e.preventDefault();

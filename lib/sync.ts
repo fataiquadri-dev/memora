@@ -77,6 +77,9 @@ async function flush() {
   if (!sb) return;
   const user = await ensureUser();
   if (!user) return;
+  try {
+    localStorage.setItem("memora_uid", user);
+  } catch {}
 
   // One-time import of what is already saved on this phone
   if (!readFlag(K.imported)) {
@@ -156,6 +159,7 @@ export function logActivity(a: { deckTitle: string; icon: string; text: string; 
 let started = false;
 export function startSync() {
   if (typeof window === "undefined" || started) return;
+  if (window.location.pathname.startsWith("/auth/")) return;
   if (!readName()) return;
   started = true;
   enqueue(flush);
@@ -185,4 +189,84 @@ if (typeof window !== "undefined") {
   normalizeLocalIds();
   startSync();
   window.addEventListener("online", scheduleFlush);
+}
+
+// ---- accounts: switching users and restoring from the cloud ----
+export function reassignLocalIds() {
+  const decks = readDecks().map((d) => ({ ...d, id: uid(), cards: d.cards.map((c) => ({ ...c, id: uid() })) }));
+  writeDecks(decks);
+  writeList(K.dirty, decks.map((d) => d.id));
+  writeList(K.deleted, []);
+  writeFlag(K.statsDirty, true);
+  writeFlag(K.imported, true);
+}
+
+async function fetchAll(sb: SupabaseClient, table: string, col: string, asc: boolean) {
+  const out: any[] = [];
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await sb
+      .from(table)
+      .select("*")
+      .order(col, { ascending: asc })
+      .order("id")
+      .range(from, from + 999);
+    if (error) throw error;
+    out.push(...(data || []));
+    if (!data || data.length < 1000) break;
+  }
+  return out;
+}
+
+export async function restoreFromCloud() {
+  const sb = getClient();
+  const user = await ensureUser();
+  if (!sb || !user) return;
+  const { data: prof } = await sb.from("profiles").select("*").eq("id", user).maybeSingle();
+  const [decks, cards] = await Promise.all([
+    fetchAll(sb, "decks", "created_at", false),
+    fetchAll(sb, "cards", "position", true),
+  ]);
+  const byDeck = new Map<string, Deck["cards"]>();
+  for (const c of cards) {
+    const list = byDeck.get(c.deck_id) || [];
+    list.push({ id: c.id, front: c.front, back: c.back, examLikely: !!c.exam_likely, theme: c.theme, known: !!c.known });
+    byDeck.set(c.deck_id, list);
+  }
+  const local = readDecks();
+  const have = new Set(local.map((d) => d.id));
+  const fromCloud: Deck[] = decks
+    .filter((d) => !have.has(d.id))
+    .map((d) => ({
+      id: d.id,
+      title: d.title,
+      icon: d.icon,
+      description: d.description,
+      favorite: !!d.favorite,
+      lastStudied: d.last_studied ? Date.parse(d.last_studied) : undefined,
+      createdAt: Date.parse(d.created_at),
+      cards: byDeck.get(d.id) || [],
+    }));
+  writeDecks([...local, ...fromCloud].sort((a, b) => b.createdAt - a.createdAt));
+  if (prof) {
+    if (prof.name && !readName()) localStorage.setItem(K.name, prof.name);
+    const s = readStatsRaw();
+    const cloudNewer = (prof.last_day || "") > (s.lastDay || "");
+    localStorage.setItem(
+      K.stats,
+      JSON.stringify({
+        ...s,
+        streak: cloudNewer ? prof.streak || 0 : s.streak || 0,
+        lastDay: cloudNewer ? prof.last_day || "" : s.lastDay || "",
+        studySeconds: Math.max(s.studySeconds || 0, prof.study_seconds || 0),
+        studiedCards: Math.max(s.studiedCards || 0, prof.studied_cards || 0),
+        activity: s.activity || [],
+      })
+    );
+  }
+}
+
+export async function flushNow() {
+  try {
+    await flush();
+  } catch {}
 }

@@ -1,8 +1,9 @@
 "use client";
-import { getName } from "@/lib/profile";
 import { useEffect, useState } from "react";
 import { Stats } from "@/types";
 import { loadStats, loadDecks, currentStreak, formatTime } from "@/lib/storage";
+import { getName } from "@/lib/profile";
+import AccountCard from "@/components/AccountCard";
 
 function timeAgo(t: number) {
   const m = Math.floor((Date.now() - t) / 60000);
@@ -33,6 +34,8 @@ export default function Profile() {
           <p>Consistency builds mastery.</p>
         </div>
       </div>
+
+      <AccountCard />
 
       <div className="quick-row">
         <div className="stat"><span>🔥</span><b>{stats ? currentStreak(stats) : 0}</b><small>Day streak</small></div>

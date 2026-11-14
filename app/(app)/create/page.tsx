@@ -1,4 +1,5 @@
 "use client";
+import ModeTabs from "@/components/ModeTabs";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Flashcard } from "@/types";
@@ -289,6 +290,7 @@ export default function CreatePage() {
     <>
       <h1>Create a <span>deck.</span></h1>
       <p className="sub">Add your notes and Memora writes flashcards from every part of them.</p>
+      <ModeTabs active="notes" />
 
       <div className="form-card">
         <form onSubmit={onSubmit}>

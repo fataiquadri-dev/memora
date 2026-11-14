@@ -96,3 +96,42 @@ export async function generate(
   }
   throw new Error(lastError);
 }
+
+export async function callAI(path: string, body: object, onNote?: (m: string) => void): Promise<Part> {
+  let lastError = "Something went wrong";
+  for (let attempt = 0; attempt < 3; attempt++) {
+    if (dailyHit) throw Object.assign(new Error(dailyMessage()), { daily: true });
+    const wait = pauseUntil - Date.now();
+    if (wait > 0) {
+      onNote?.(`Google's free limit is busy. Waiting ${Math.ceil(wait / 1000)}s, then continuing...`);
+      await sleep(wait);
+    }
+    try {
+      const res = await fetch(path, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const raw = await res.text();
+      let data: any = null;
+      try {
+        data = JSON.parse(raw);
+      } catch {}
+      if (res.ok && data) return data as Part;
+      lastError = data?.error || (res.status === 504 ? "The AI took too long to answer." : "The server sent an unexpected reply.");
+    } catch (e: any) {
+      lastError = e.message || lastError;
+    }
+    if (/PerDay|per day/i.test(lastError)) {
+      dailyHit = true;
+      throw Object.assign(new Error(dailyMessage()), { daily: true });
+    }
+    if (/429|quota|rate|exhausted|overload|503/i.test(lastError)) {
+      const secs = Math.min(Math.max(retrySeconds(lastError) || 20, 5), 60) + 1;
+      pauseUntil = Math.max(pauseUntil, Date.now() + secs * 1000);
+    } else if (attempt < 2) {
+      await sleep(2000 * (attempt + 1));
+    }
+  }
+  throw new Error(lastError);
+}

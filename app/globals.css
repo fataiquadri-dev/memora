@@ -262,3 +262,10 @@ input:focus,textarea:focus{border-color:#6d69ff!important;box-shadow:0 0 0 3px r
 .file-row button{border:0;background:transparent;color:#ff7eaa;font-size:16px;padding:0 4px}
 .check{display:flex;align-items:center;gap:10px;margin:0 0 18px;color:#b7c6e8;font-size:13px}
 .check input{width:18px;height:18px;padding:0;margin:0;accent-color:#7c4dff}
+.google-btn{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;background:#fff;color:#1f1f1f;border:0;border-radius:14px;padding:13px 18px;font-weight:700;cursor:pointer}
+.google-btn:disabled{opacity:.7}
+.or{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:.8rem;margin:16px 0}
+.or::before,.or::after{content:"";flex:1;height:1px;background:var(--line)}
+.tabs{display:flex;gap:8px;margin:0 0 22px;flex-wrap:wrap}
+.tab{border:1px solid var(--line);background:#0b1731;color:#aab9dc;border-radius:99px;padding:9px 16px;font-size:.9rem;font-weight:600}
+.tab.on{background:linear-gradient(100deg,#713cff,#247cff);color:#fff;border-color:transparent}
