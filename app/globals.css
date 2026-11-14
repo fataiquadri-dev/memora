@@ -269,3 +269,9 @@ input:focus,textarea:focus{border-color:#6d69ff!important;box-shadow:0 0 0 3px r
 .tabs{display:flex;gap:8px;margin:0 0 22px;flex-wrap:wrap}
 .tab{border:1px solid var(--line);background:#0b1731;color:#aab9dc;border-radius:99px;padding:9px 16px;font-size:.9rem;font-weight:600}
 .tab.on{background:linear-gradient(100deg,#713cff,#247cff);color:#fff;border-color:transparent}
+.legal{max-width:720px;margin:0 auto;line-height:1.7;color:#c9d4f2}
+.legal h1{font-size:clamp(28px,5vw,40px);margin-bottom:6px}
+.legal h2{font:700 20px 'Space Grotesk',sans-serif;margin:28px 0 8px;color:#fff}
+.legal a{color:#a99bff}
+.legal ul{padding-left:20px}
+.lp-footer a{color:#a99bff}

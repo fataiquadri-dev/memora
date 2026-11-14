@@ -126,7 +126,7 @@ export default function Landing() {
         <Link className="primary" href="/create">✨ Make my flashcards</Link>
       </section>
 
-      <footer className="lp-footer">© 2026 Memora. Study smarter. Remember longer.</footer>
+      <footer className="lp-footer">© 2026 Memora · <Link href="/privacy">Privacy</Link> · <Link href="/terms">Terms</Link></footer>
     </div>
   );
 }
